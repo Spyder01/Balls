@@ -1,0 +1,125 @@
+name: Odin CI/CD with raylib
+
+# Trigger the workflow on push or pull request to the main branch
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # You can extend the matrix to include different Odin versions or architectures if needed
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+
+    - name: Set up Odin Compiler on Linux and macOS
+      if: runner.os != 'Windows'
+      run: |
+        # Define Odin version
+        ODIN_VERSION="v0.35.0"
+
+        # Download Odin
+        wget https://github.com/odin-lang/Odin/releases/download/${ODIN_VERSION}/odin-linux.zip -O odin.zip
+
+        # Extract Odin
+        unzip odin.zip -d odin
+
+        # Move Odin binary to /usr/local/bin
+        sudo mv odin/odin /usr/local/bin/
+
+        # Verify Odin installation
+        odin version
+
+    - name: Set up Odin Compiler on Windows
+      if: runner.os == 'Windows'
+      run: |
+        $ErrorActionPreference = "Stop"
+        # Define Odin version
+        $odinVersion = "v0.35.0"
+
+        # Download Odin
+        Invoke-WebRequest -Uri "https://github.com/odin-lang/Odin/releases/download/$odinVersion/odin-windows.zip" -OutFile "odin.zip"
+
+        # Extract Odin
+        Expand-Archive -Path "odin.zip" -DestinationPath "odin"
+
+        # Add Odin to PATH
+        $env:PATH += ";$(pwd)\odin"
+
+        # Verify Odin installation
+        odin.exe version
+
+    - name: Install raylib on Ubuntu
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libraylib-dev
+        # Install dependencies for raylib if not already present
+        sudo apt-get install -y build-essential libgl1-mesa-dev
+        # Verify raylib installation
+        pkg-config --modversion raylib
+
+    - name: Install raylib on macOS
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew update
+        brew install raylib
+        # Verify raylib installation
+        pkg-config --modversion raylib
+
+    - name: Install raylib on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Download precompiled raylib binaries or build from source
+        # For simplicity, we'll download precompiled binaries
+
+        # Define raylib version
+        $raylibVersion = "4.5.0"
+
+        # Download raylib
+        Invoke-WebRequest -Uri "https://github.com/raysan5/raylib/releases/download/$(raylibVersion)/raylib-windows.zip" -OutFile "raylib.zip"
+
+        # Extract raylib
+        Expand-Archive -Path "raylib.zip" -DestinationPath "raylib"
+
+        # Set environment variables for raylib
+        $env:LIB = "$(pwd)\raylib\lib;" + $env:LIB
+        $env:INCLUDE = "$(pwd)\raylib\include;" + $env:INCLUDE
+
+        # Verify raylib installation
+        pkg-config --modversion raylib || echo "raylib pkg-config not available on Windows"
+
+    - name: Install Dependencies (if any)
+      run: |
+        # Example for a project using external libraries
+        # Replace with your actual dependency installation commands
+        echo "Installing project-specific dependencies..."
+
+    - name: Build Odin Project with raylib on Linux and macOS
+      if: matrix.os != 'Windows'
+      run: |
+        mkdir -p build
+        odin build src/balls.odin -out:build/your_binary_${{ matrix.os }} -passc:"pkg-config --cflags --libs raylib"
+      shell: bash
+
+    - name: Build Odin Project with raylib on Windows
+      if: matrix.os == 'Windows'
+      run: |
+        mkdir build
+        odin build src/balls.odin -out:build\your_binary_${{ matrix.os }} -passc:"pkg-config --cflags --libs raylib" -cc:"cl.exe"
+      shell: cmd
+
+
+    - name: Upload Binary Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: odin-binary-${{ matrix.os }}
+        path: build/your_binary_${{ matrix.os }}
